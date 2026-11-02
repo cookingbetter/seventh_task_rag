@@ -9,19 +9,22 @@ from openai import OpenAI
 
 from embedder import ENV_PATH
 from prompts import GROUNDED_SYSTEM, UNGROUNDED_SYSTEM
-from retriever import RetrievedChunk, search
+from retriever import RetrievedChunk, is_weak_context, search
 from schemas import PlainAnswer, RagAnswer, SourceRef
 
 ANSWER_MODEL = "gpt-4.1-mini"
+WEAK_CONTEXT_ANSWER = (
+    "В базе знаний нет достаточно близкого контекста, чтобы ответить на этот вопрос."
+)
 
 
 def answer(query: str) -> RagAnswer:
     """Отвечает на вопрос только по top-3 чанкам из Weaviate."""
     text = _require_query(query)
     chunks = search(text)
-    if not chunks:
+    if is_weak_context(chunks):
         return RagAnswer(
-            answer="По найденным фрагментам ответить нельзя: поиск ничего не вернул.",
+            answer=WEAK_CONTEXT_ANSWER,
             context_sufficient=False,
             sources=[],
         )

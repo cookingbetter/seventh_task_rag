@@ -11,6 +11,7 @@ from embedder import embed_texts
 from weaviate_store import COLLECTION_NAME
 
 TOP_K = 3
+MAX_DISTANCE = 0.55
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,14 @@ class RetrievedChunk:
     text: str
     distance: float | None = None
     score: float | None = None
+
+
+def is_weak_context(chunks: list[RetrievedChunk]) -> bool:
+    """Контекст слабый, если ближайший чанк дальше порога или его нет."""
+    distances = [chunk.distance for chunk in chunks if chunk.distance is not None]
+    if not distances:
+        return True
+    return min(distances) > MAX_DISTANCE
 
 
 def search(query: str, limit: int = TOP_K) -> list[RetrievedChunk]:

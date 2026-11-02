@@ -23,6 +23,8 @@ def main(argv: list[str] | None = None) -> int:
         return demo_questions()
     if args == ["compare"]:
         return compare_answers()
+    if args == ["evaluate"]:
+        return evaluate_questions()
     if args[0] in {"ask", "answer"}:
         query = " ".join(args[1:]).strip()
         if not query:
@@ -33,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         return answer_question(query)
     print(
         "Неизвестная команда. Используйте: "
-        'python3 main.py [index|demo|compare|ask "вопрос"|answer "вопрос"]',
+        'python3 main.py [index|demo|compare|evaluate|ask "вопрос"|answer "вопрос"]',
         file=sys.stderr,
     )
     return 1
@@ -89,6 +91,15 @@ def index_knowledge_base() -> int:
     return 0
 
 
+WEAK_QUESTIONS = [
+    "Какая столица Франции?",
+    "Как приготовить борщ?",
+    "Какой курс доллара сегодня?",
+    "Как получить визу в Японию?",
+    "Сколько планет в Солнечной системе?",
+]
+
+
 DEMO_QUESTIONS = [
     "В какое время нельзя проводить шумные ремонтные работы в Москве?",
     "Как зарегистрироваться в личном кабинете ПИК-Комфорт?",
@@ -96,6 +107,42 @@ DEMO_QUESTIONS = [
     "Нужно ли передавать показания счётчиков, если не живу в квартире?",
     "Чем опасна незаконная перепланировка?",
 ]
+
+
+def evaluate_questions() -> int:
+    print("Вопросы, на которые база отвечает")
+    for query in DEMO_QUESTIONS:
+        if _evaluate_one(query) != 0:
+            return 1
+    print()
+    print("Вопросы вне базы")
+    for query in WEAK_QUESTIONS:
+        if _evaluate_one(query) != 0:
+            return 1
+    return 0
+
+
+def _evaluate_one(query: str) -> int:
+    try:
+        from rag_pipeline import answer
+        from retriever import search
+
+        hits = search(query)
+        result = answer(query)
+    except Exception as exc:
+        print(f"Не удалось оценить вопрос: {exc}", file=sys.stderr)
+        return 1
+    best = hits[0] if hits else None
+    distance = f"{best.distance:.4f}" if best and best.distance is not None else "—"
+    source = best.source_name if best else "—"
+    decision = "ответ" if result.context_sufficient else "отказ"
+    print(f"Вопрос: {query}")
+    print(f"distance: {distance}")
+    print(f"source_name: {source}")
+    print(f"решение: {decision}")
+    print(result.answer)
+    print()
+    return 0
 
 
 def answer_question(query: str) -> int:
