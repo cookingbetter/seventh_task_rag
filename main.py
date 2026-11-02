@@ -21,14 +21,19 @@ def main(argv: list[str] | None = None) -> int:
         return index_knowledge_base()
     if args == ["demo"]:
         return demo_questions()
-    if args[0] == "ask":
+    if args == ["compare"]:
+        return compare_answers()
+    if args[0] in {"ask", "answer"}:
         query = " ".join(args[1:]).strip()
         if not query:
-            print('Укажите вопрос: python3 main.py ask "вопрос"', file=sys.stderr)
+            print(f'Укажите вопрос: python3 main.py {args[0]} "вопрос"', file=sys.stderr)
             return 1
-        return ask_question(query)
+        if args[0] == "ask":
+            return ask_question(query)
+        return answer_question(query)
     print(
-        'Неизвестная команда. Используйте: python3 main.py [index|demo|ask "вопрос"]',
+        "Неизвестная команда. Используйте: "
+        'python3 main.py [index|demo|compare|ask "вопрос"|answer "вопрос"]',
         file=sys.stderr,
     )
     return 1
@@ -91,6 +96,53 @@ DEMO_QUESTIONS = [
     "Нужно ли передавать показания счётчиков, если не живу в квартире?",
     "Чем опасна незаконная перепланировка?",
 ]
+
+
+def answer_question(query: str) -> int:
+    try:
+        from rag_pipeline import answer
+
+        result = answer(query)
+    except Exception as exc:
+        print(f"Не удалось собрать ответ: {exc}", file=sys.stderr)
+        return 1
+    _print_rag_answer(result)
+    return 0
+
+
+def compare_answers() -> int:
+    try:
+        from rag_pipeline import answer, answer_without_retrieval
+    except Exception as exc:
+        print(f"Не удалось собрать ответ: {exc}", file=sys.stderr)
+        return 1
+
+    for query in DEMO_QUESTIONS:
+        print(f"Вопрос: {query}")
+        try:
+            plain = answer_without_retrieval(query)
+            grounded = answer(query)
+        except Exception as exc:
+            print(f"Не удалось собрать ответ: {exc}", file=sys.stderr)
+            return 1
+        print("Без retrieval:")
+        print(plain)
+        print("С retrieval:")
+        _print_rag_answer(grounded)
+        print()
+    return 0
+
+
+def _print_rag_answer(result) -> None:
+    print(result.answer)
+    sufficient = "да" if result.context_sufficient else "нет"
+    print(f"Контекст достаточен: {sufficient}")
+    print("Источники:")
+    if not result.sources:
+        print("- нет")
+        return
+    for source in result.sources:
+        print(f"- {source.chunk_id} | {source.source_name}")
 
 
 def ask_question(query: str) -> int:
