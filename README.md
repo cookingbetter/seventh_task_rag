@@ -36,4 +36,21 @@ python3 main.py
 
 `python3 main.py` печатает число чанков по каждому файлу и три примера из самого длинного документа.
 
-Embeddings, Weaviate и ответ модели — следующие этапы.
+## День 3
+
+Weaviate запускается локально и хранит чанки с векторами OpenAI `text-embedding-3-small`.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+docker compose up -d
+python3 main.py index
+```
+
+В `.env` нужна переменная `OPENAI_API_KEY`. Файл не коммитится.
+
+Команда удаляет коллекцию `KnowledgeChunk`, создаёт её заново и загружает текущие чанки. Повторный запуск не оставляет дубликаты: число объектов равно числу чанков. В консоли печатаются это число и один объект с `chunk_id`, `document_id`, `source_name` и началом текста.
+
+Поиск по вопросу — следующий этап.

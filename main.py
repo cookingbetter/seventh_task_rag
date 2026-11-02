@@ -1,35 +1,32 @@
-"""Точка входа: загрузка базы знаний и нарезка документов на чанки."""
+"""Точка входа: просмотр базы знаний и загрузка чанков в Weaviate."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-from chunking import CHUNK_OVERLAP, CHUNK_SIZE, Chunk, chunk_document
+from chunking import CHUNK_OVERLAP, CHUNK_SIZE, Chunk, chunk_document, chunk_documents
 from loader import Document, load_documents
 
 KNOWLEDGE_BASE = Path(__file__).resolve().parent / "knowledge_base"
 EXAMPLE_COUNT = 3
+SAMPLE_TEXT_LIMIT = 180
 
 
-def main() -> int:
-    if not KNOWLEDGE_BASE.is_dir():
-        print(f"Папка базы знаний не найдена: {KNOWLEDGE_BASE}", file=sys.stderr)
-        return 1
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if not args:
+        return show_knowledge_base()
+    if args == ["index"]:
+        return index_knowledge_base()
+    print("Неизвестная команда. Используйте: python3 main.py [index]", file=sys.stderr)
+    return 1
 
-    try:
-        documents = load_documents(KNOWLEDGE_BASE)
-    except ValueError as exc:
-        print(exc, file=sys.stderr)
-        return 1
 
-    if not documents:
-        print("Документы не найдены.")
-        print(
-            "Положите минимум 5 файлов .txt или .md в кодировке UTF-8 "
-            f"в папку {KNOWLEDGE_BASE}"
-        )
-        return 1
+def show_knowledge_base() -> int:
+    documents, error_code = _load_documents()
+    if error_code != 0 or documents is None:
+        return error_code
 
     chunked = [(document, chunk_document(document)) for document in documents]
     print(f"Загружено документов: {len(documents)}")
@@ -42,6 +39,59 @@ def main() -> int:
 
     _print_examples(chunked)
     return 0
+
+
+def index_knowledge_base() -> int:
+    documents, error_code = _load_documents()
+    if error_code != 0 or documents is None:
+        return error_code
+
+    chunks = chunk_documents(documents)
+    if not chunks:
+        print("Нет чанков для загрузки.", file=sys.stderr)
+        return 1
+
+    try:
+        from embedder import embed_texts
+        from weaviate_store import upload_chunks
+
+        vectors = embed_texts([chunk.text for chunk in chunks])
+        summary = upload_chunks(chunks, vectors)
+    except Exception as exc:
+        print(f"Не удалось загрузить базу в Weaviate: {exc}", file=sys.stderr)
+        return 1
+
+    sample = summary.sample
+    preview = sample.text.replace("\n", " ")
+    if len(preview) > SAMPLE_TEXT_LIMIT:
+        preview = preview[:SAMPLE_TEXT_LIMIT] + "..."
+    print(f"Объектов в коллекции: {summary.count}")
+    print(f"chunk_id: {sample.chunk_id}")
+    print(f"document_id: {sample.document_id}")
+    print(f"source_name: {sample.source_name}")
+    print(f"text: {preview}")
+    return 0
+
+
+def _load_documents() -> tuple[list[Document] | None, int]:
+    if not KNOWLEDGE_BASE.is_dir():
+        print(f"Папка базы знаний не найдена: {KNOWLEDGE_BASE}", file=sys.stderr)
+        return None, 1
+
+    try:
+        documents = load_documents(KNOWLEDGE_BASE)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return None, 1
+
+    if not documents:
+        print("Документы не найдены.")
+        print(
+            "Положите минимум 5 файлов .txt или .md в кодировке UTF-8 "
+            f"в папку {KNOWLEDGE_BASE}"
+        )
+        return None, 1
+    return documents, 0
 
 
 def _print_examples(chunked: list[tuple[Document, list[Chunk]]]) -> None:
