@@ -19,7 +19,18 @@ def main(argv: list[str] | None = None) -> int:
         return show_knowledge_base()
     if args == ["index"]:
         return index_knowledge_base()
-    print("Неизвестная команда. Используйте: python3 main.py [index]", file=sys.stderr)
+    if args == ["demo"]:
+        return demo_questions()
+    if args[0] == "ask":
+        query = " ".join(args[1:]).strip()
+        if not query:
+            print('Укажите вопрос: python3 main.py ask "вопрос"', file=sys.stderr)
+            return 1
+        return ask_question(query)
+    print(
+        'Неизвестная команда. Используйте: python3 main.py [index|demo|ask "вопрос"]',
+        file=sys.stderr,
+    )
     return 1
 
 
@@ -71,6 +82,69 @@ def index_knowledge_base() -> int:
     print(f"source_name: {sample.source_name}")
     print(f"text: {preview}")
     return 0
+
+
+DEMO_QUESTIONS = [
+    "В какое время нельзя проводить шумные ремонтные работы в Москве?",
+    "Как зарегистрироваться в личном кабинете ПИК-Комфорт?",
+    "Как подключить автоплатёж?",
+    "Нужно ли передавать показания счётчиков, если не живу в квартире?",
+    "Чем опасна незаконная перепланировка?",
+]
+
+
+def ask_question(query: str) -> int:
+    try:
+        from retriever import search
+
+        hits = search(query)
+    except Exception as exc:
+        print(f"Не удалось выполнить поиск: {exc}", file=sys.stderr)
+        return 1
+    _print_hits("Semantic search", hits)
+    return 0
+
+
+def demo_questions() -> int:
+    try:
+        from retriever import search, search_hybrid
+    except Exception as exc:
+        print(f"Не удалось выполнить поиск: {exc}", file=sys.stderr)
+        return 1
+
+    for query in DEMO_QUESTIONS:
+        print(f"Вопрос: {query}")
+        try:
+            semantic = search(query)
+            hybrid = search_hybrid(query)
+        except Exception as exc:
+            print(f"Не удалось выполнить поиск: {exc}", file=sys.stderr)
+            return 1
+        _print_hits("Semantic search", semantic)
+        _print_hits("Hybrid search", hybrid)
+        print()
+    return 0
+
+
+def _print_hits(title: str, hits: list) -> None:
+    print(title)
+    if not hits:
+        print("Ничего не найдено.")
+        return
+    for index, hit in enumerate(hits, start=1):
+        if hit.distance is not None:
+            metric = f"distance: {hit.distance:.4f}"
+        elif hit.score is not None:
+            metric = f"score: {hit.score:.4f}"
+        else:
+            metric = "score: —"
+        preview = hit.text.replace("\n", " ")
+        if len(preview) > SAMPLE_TEXT_LIMIT:
+            preview = preview[:SAMPLE_TEXT_LIMIT] + "..."
+        print(f"{index}. {metric}")
+        print(f"source_name: {hit.source_name}")
+        print(f"chunk_id: {hit.chunk_id}")
+        print(preview)
 
 
 def _load_documents() -> tuple[list[Document] | None, int]:
